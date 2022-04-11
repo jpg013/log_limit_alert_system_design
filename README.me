@@ -1,0 +1,32 @@
+We need to notify users when they approach or exceed a limit.
+
+Requirements
+Send an email whenever a log entry causes a limit to be exceeded OR reach at least 90% of the limit, e.g. send the email if value > 0.9 * limit.
+
+If the log entry causes an exceedance that the user has already been notified about (or a warning that the user has already been warned of), do not send the email.
+
+For example, say they have a limit of 100 tons/month. Yesterday you emailed them to let them know they exceeded their limit (they were at 104 tons). Today (still the same month) they logged an additional 4 tons, so they are at 108 tons. Do not send another email.
+
+On the other hand, let's say they have a limit of 100 tons/month and 1000 tons/year. Yesterday you emailed them to let them know they exceeded their limit (they were at 104 tons for the month, 999 for the year). Today (still the same month) they logged an additional 10 tons, so they have now exceeded their yearly limit as well (1009 tons for the year). Do send another email.
+
+Log schema example
+
+Log item (things a user can log):
+unique id
+name of pollutant
+units (e.g. grams, liters)
+log frequency (e.g. day, week, month, quarter, year)
+
+Log record (actual recorded pollution at a given time):
+unique id
+logged item id
+log value
+log unit
+log date
+
+Limit (what we don’t want emission to exceed):
+unique id
+logged item id (what this limit for)
+units (e.g. grams, liters)
+limit value
+limit frequency (e.g. month, quarter, year)
