@@ -1,24 +1,26 @@
 import { Pool } from 'pg';
 import express from 'express';
-import { makeLogService } from './log-service';
-import { makeNotificationService } from './notification-service';
+import { createLogService } from './log-service';
+import { createNotificationService } from './notification-service';
 const app = express();
 import bodyParser from 'body-parser';
 import morgan from 'morgan';
 
+// config middleware
 app.use(bodyParser.json());
 app.use(morgan('combined'));
 
-const dbConfig = {
+// New db connection pool
+const pool = new Pool({
   connectionString: 'postgres://dev:dev@localhost:5432/dev',
   connectionTimeoutMillis: 10000,
   max: 10,
-};
+});
 
-const pool = new Pool(dbConfig);
-const notificationService = makeNotificationService(pool);
-const logService = makeLogService(pool, notificationService);
+const notificationService = createNotificationService(pool);
+const logService = createLogService(pool, notificationService);
 
+// Define route handler for POST "/log_record"
 app.post('/log_record', async (req, res) => {
   try {
     const result = await logService.createLogRecord({
@@ -33,8 +35,10 @@ app.post('/log_record', async (req, res) => {
   };
 });
 
+// Tell logService to start listening for any logLimit alerts
 logService.listenForLogLimitAlerts();
 
+// Run App
 app.listen(8080, () => {
-  console.log('App Running');
+  console.log('App Running on port 8080');
 });

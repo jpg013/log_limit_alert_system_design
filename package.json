@@ -1,7 +1,7 @@
 {
-  "name": "kc-mutual-aid-api",
+  "name": "log-alert-system-design",
   "version": "1.0.0",
-  "description": "Graphql API for KC Mutual Aid Application.",
+  "description": "Log Alert System Design Solution.",
   "author": "Justin Graber <4graber@protonmail.com>",
   "license": "MIT",
   "scripts": {

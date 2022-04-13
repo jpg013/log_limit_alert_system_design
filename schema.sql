@@ -12,6 +12,7 @@ drop trigger check_log_alert on public.log_record;
 drop function if exists public.notify_new_alert;
 drop trigger notify_new_alert on public.log_limit_alert;
 
+
 -- create enum type to store "unit" values
 create type public.unit_enum as enum (
 	'grams',
@@ -25,8 +26,7 @@ create type public.frequency_enum as enum (
 	'year'
 );
 
--- create public.log_item table that contains information about the type of
--- things that can be logged.
+-- Table public.log_item contains information about the type of items that can be logged.
 create table public.log_item (
 	id int generated always as identity,
 	name_of_pollutant text not null,
@@ -35,7 +35,7 @@ create table public.log_item (
 	primary key (id)
 );
 
--- create "public.log_record" table that contains log data for a given log_item.
+-- Table "public.log_record" that contains log data for a given log_item.
 create table public.log_record (
 	id int generated always as identity,
 	log_item_id int not null,
@@ -45,7 +45,7 @@ create table public.log_record (
 	primary key (id)
 );
 
--- add foreign key constraint "fk_log_item"
+-- Add foreign key constraint "fk_log_item"
 alter table only public.log_record
 add constraint fk_log_item foreign key (log_item_id)
 references public.log_item (id)
@@ -54,7 +54,7 @@ on delete cascade;
 -- Add an index on "timestamp" 
 create index log_record_timestamp_idx on public.log_record using btree ("timestamp");
 
--- create "public.log_limit" table that contains information about a log_item limit.
+-- Table "public.log_limit" that contains information about a log_item limit.
 create table public.log_limit (
 	id int generated always as identity,
 	log_item_id int not null,
@@ -64,13 +64,13 @@ create table public.log_limit (
 	primary key (id)
 );
 
--- add foreign key constraint "fk_log_item"
+-- Add foreign key constraint "fk_log_item"
 alter table only public.log_limit
 add constraint fk_log_item foreign key (log_item_id)
 references public.log_item (id)
 on delete cascade;
 
--- Table: public.log_limit_alert contains alert information for when a log_limit is exceeded.
+-- Table: public.log_limit_alert contains information about alerts that are created when a log_limit is exceeded.
 create table public.log_limit_alert (
 	id int generated always as identity,
 	log_limit_id int not null,
@@ -79,12 +79,13 @@ create table public.log_limit_alert (
 	primary key (id)
 );
 
--- add foreign key constraint "fk_log_limit"
+-- Add foreign key constraint "fk_log_limit"
 alter table only public.log_limit_alert
 add constraint fk_log_limit foreign key (log_limit_id)
 references public.log_limit (id)
 on delete cascade;
 
+-- Table: public.log_limit_alert contains notification lookup data for a "log_limit".
 create table public.notification_lookup (
 	id int generated always as identity,
 	log_limit_id int not null,
@@ -94,12 +95,13 @@ create table public.notification_lookup (
 	primary key (id)
 );
 
--- add foreign key constraint "fk_log_limit"
+-- Add foreign key constraint "fk_log_limit".
 alter table only public.notification_lookup
 add constraint fk_log_limit foreign key (log_limit_id)
 references public.log_limit (id)
 on delete cascade;
 
+-- Table: public.notification_record contains records for each notification that is sent for a "log_limit_alert.
 create table public.notification_record (
 	id int generated always as identity,
 	notification_lookup_id int not null,
@@ -118,6 +120,7 @@ add constraint fk_alert foreign key (log_limit_alert_id)
 references public.log_limit_alert (id)
 on delete cascade;
 
+-- Unique index that ensures that only 1 notification can be sent for a given "log_limit_alert" and a "lookup".
 create unique index unique_notification_record_idx on public.notification_record (notification_lookup_id, log_limit_alert_id);
 
 -- Function: "public.create_log_item" - accepts inputs and creates a new log_item.
@@ -170,6 +173,8 @@ as $$
 	returning *;
 $$ language sql strict;
 
+-- Function "public.is_within_frequency" - accepts a frequency and a timestamp and returns true if the provided timestamp
+-- is within the current frequency interval, else false.
 create or replace function public.is_within_frequency(v_freq public.frequency_enum, v_ts timestamptz) returns boolean as 
 $$
 	select case v_freq
@@ -184,17 +189,24 @@ $$
 	end as is_within_frequency
 $$ language sql strict;
 
+-- Function "public.sum_log_value_over_frequency" - accepts a unique log_item_id key, and a frequency and
+-- sums all log_records matching on log_item_id that are within the given frequency.
 create or replace function public.sum_log_value_over_frequency(
-	v_log_item_id int, 
+	v_log_item_id int,
 	v_freq public.frequency_enum
 ) returns numeric
 language sql strict
 as $$
-	select sum(log.value) from public.log_record log
-	where log.log_item_id = v_log_item_id
-	and public.is_within_frequency(v_freq, log."timestamp");
+	select sum("log"."value") from public.log_record "log"
+	where "log".log_item_id = v_log_item_id
+	and public.is_within_frequency(v_freq, "log"."timestamp");
 $$;
 
+
+-- Function public.check_log_limit - returns trigger function
+-- that is called when a new "log_record" is created and sums all log_record values
+-- for each log_limit within the given log_limit frequency, and insert a new "log_limit_alert"
+-- if the sum value exceeeds the "log_limit" threshold.
 create or replace function public.check_log_limit() returns trigger 
 as $$
 	begin
@@ -207,6 +219,8 @@ as $$
 			from public.log_limit lim
 			where lim.log_item_id = NEW.log_item_id
 			and not exists (
+				-- The part will excluded all log_limits that already have and alert within the given frequency,
+				-- which prevents duplicate alert to be created during the same frequency.
 				select 1 from public.log_limit_alert la
 				where la.log_limit_id = lim.id
 				and public.is_within_frequency(lim.limit_frequency, la.created_at) = true
@@ -230,6 +244,7 @@ $$ language plpgsql;
 create trigger check_log_limit after insert or update on public.log_record
 for each row execute function check_log_limit();
 
+-- Send "log_alert" notification whenever a new "log_limit_alert" row is inserted.
 create or replace function public.notify_new_alert() returns trigger as
 $$
 	begin
@@ -245,10 +260,8 @@ on "public"."log_limit_alert"
 for each row
 execute procedure notify_new_alert();
 
+-- Helper calls to insert data
 select * from public.create_log_item('Nitrate', 'grams', 'month');
 select * from public.create_log_limit(1, 'grams', 100, 'month');
 select * from public.create_log_limit(1, 'grams', 25, 'week');
 select * from public.create_log_limit(1, 'grams', 5, 'day');
-select * from public.create_log_record(1, 12, 'grams', '2022-04-09'::timestamptz);
-select * from public.create_log_record(1, 86, 'grams', '2022-04-09'::timestamptz);
-select * from public.create_log_record(1, 2.1, 'grams', '2022-04-09'::timestamptz);

@@ -1,0 +1,73 @@
+// Enum for 'units'
+Enum unit_enum {
+  grams
+	liters
+}
+
+// Enum for 'frequency'
+Enum frequency_enum {
+  day
+	week
+	month
+	year
+}
+
+Table log_item {
+  id int [pk, increment] // auto-increment
+  name_of_pollutant varchar [not null]
+	unit unit_enum  [not null]
+	frequency frequency_enum [not null]
+}
+
+Table log_record {
+  id int [pk, increment] // auto-increment
+  log_item_id int [not null]
+  value numeric [not null]
+  unit unit_enum [not null]
+  timestamp timestamptz
+
+  Indexes {
+    ("timestamp") [name:'log_record_timestamp_idx']
+  }
+}
+
+Table log_limit {
+  id int [pk, increment] // auto-increment
+  log_item_id int [not null]
+  unit unit_enum [not null]
+  limit_value numeric [not null]
+  limit_frequency frequency_enum [not null]
+}
+
+Table log_limit_alert {
+	id int [pk, increment] // auto-increment
+  log_limit_id int [not null]
+  exceeded_value numeric [not null]
+  created_at timestamptz [not null]
+}
+
+Table notification_lookup {
+  id int [pk, increment] // auto-increment
+  log_limit_id int [not null]
+  notification_type varchar [not null]
+  notification_address varchar [not null]
+  created_at timestamptz [not null]
+}
+
+Table notification_record {
+  id int [pk, increment] // auto-increment
+  notification_lookup_id int [not null]
+  log_limit_alert_id int [not null]
+  created_at timestamptz
+
+  Indexes {
+    (notification_lookup_id, log_limit_alert_id) [name:'unique_notification_record_idx', unique]
+  }
+}
+
+Ref: log_record.log_item_id > log_item.id
+Ref: log_limit.log_item_id > log_item.id
+Ref: log_limit_alert.log_limit_id > log_limit.id
+Ref: notification_lookup.log_limit_id > log_limit.id
+Ref: notification_record.notification_lookup_id > notification_lookup.id
+Ref: notification_record.log_limit_alert_id > log_limit_alert.id

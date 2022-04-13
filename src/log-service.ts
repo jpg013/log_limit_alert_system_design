@@ -3,12 +3,20 @@ import { CreateLogRecordData, LogRecord, LogLimitAlert, PgNotifyEvent } from './
 import { NotificationService } from './notification-service';
 import { createLogRecordSql, listenForAlertsSql } from './sql';
 
+/**
+ * LogService interface defines a LogService with methods for creating a new LogRecord
+ * and listening for LogLimit alerts.
+ */
 interface LogService {
   createLogRecord: (data: CreateLogRecordData) => Promise<LogRecord>;
   listenForLogLimitAlerts: () => void;
 };
 
-export const makeLogService = (pool: Pool, notificationService: NotificationService): LogService => {
+/**
+ * Factory function that creates and returns a new LogService.
+ */
+export const createLogService = (pool: Pool, notificationService: NotificationService): LogService => {
+  // Accepts a CreateLogRecordData input and creates a new log_record in the database
   const createLogRecord = async (data: CreateLogRecordData): Promise<LogRecord> => {
     const client = await pool.connect();
 
@@ -32,9 +40,12 @@ export const makeLogService = (pool: Pool, notificationService: NotificationServ
     } catch (err) {
       console.error('Error creating log record', err);
       throw err;
+    } finally {
+      client.release();
     }
   };
 
+  // Listens for "log_alert" notifications and sends them to the notification service.
   const listenForLogLimitAlerts = async () => {
     const client = await pool.connect();
 
@@ -42,10 +53,10 @@ export const makeLogService = (pool: Pool, notificationService: NotificationServ
       try {
         const alertData = JSON.parse(event.payload);  
         
+        // Simulate some async "sender", like pushing to Kinesis stream or Kafka Topic.
         process.nextTick(() => {
           // Fire and Forget alert to notification service
           console.log('sending alert to notificationService');
-
           notificationService.sendAlert({
             id: alertData.id,
             logLimitId: alertData.log_limit_id,
@@ -60,6 +71,7 @@ export const makeLogService = (pool: Pool, notificationService: NotificationServ
       }
     });
 
+    // Tell the client to listen to Postgres for "log_alert" notifications 
     client.query(listenForAlertsSql);
   };
 
